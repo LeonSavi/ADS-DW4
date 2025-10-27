@@ -1,0 +1,330 @@
+---
+title: "Text clustering"
+author: 
+  - Author One
+  - Author Two
+  - Author Three
+date: last-modified
+format:
+  html:
+    toc: true
+    self-contained: true
+    code-fold: true
+    df-print: kable
+---
+
+
+
+# Data description
+
+Describe the data and use a visualization to support your story. (approx. one or two paragraphs)
+
+
+
+
+# Text pre-processing
+
+```{python}
+import nltk
+import string
+import re
+import gensim
+import inflect
+import optuna
+import pandas as pd
+from typing import Optional
+
+from nltk import pos_tag
+from nltk.corpus import stopwords, wordnet
+from nltk.tokenize import word_tokenize
+from nltk.stem import WordNetLemmatizer
+from nltk.stem.porter import PorterStemmer # another 2 kinds of Stemmer (Snowball and Lancaster)
+
+from gensim.models import Word2Vec
+
+nltk.download('punkt')
+nltk.download('stopwords')
+nltk.download('punkt_tab')
+nltk.download('wordnet')
+nltk.download('omw-1.4')
+nltk.download('averaged_perceptron_tagger_eng')
+df = pd.read_csv('dataset/imdb_text2vec.csv')
+# regex
+YEAR_RE = re.compile(r"\b((?:18|19|20)\d{2}|[1-9]0['’]?s)\b")         
+RATING_RE = re.compile(r'\b\d*(?:\.\d+)?\s*/\s*(?:5|10|100)\b')
+NUM_RE = re.compile(r'\b\d+(\.\d+)?\b')
+SPACES_RE = re.compile(r'\s*([?!.,]+(?:\s+[?!.,]+)*)\s*') #ciao,bella -> ciao, bella
+HTML_RE = re.compile(r"<(?:\"[^\"]*\"['\"]*|'[^']*'['\"]*|[^'\">])+>")
+# other
+p = inflect.engine()
+stemmer = PorterStemmer()
+lemmatizer = WordNetLemmatizer()
+
+df.columns
+
+def _convert_nums(text:str,
+        mx_splt_num:int = 1) -> str:
+
+    '''
+    We can also convert the numbers into words.
+    This can be done by using the inflect library.
+    
+    mx_num_split, we do not want conversions, like 100-> one hundred,
+    so we set the maximum number of words
+    '''
+
+    # assign <RATING>
+    text = re.sub(RATING_RE,'<RATING>',text)
+    #assign <YEAR> for 80s,90's, 1990...
+    text = re.sub(YEAR_RE,'<YEAR>',text)
+
+    # convert numbers below a threshold to string
+    temp_str = text.split()
+    new_string = []
+
+    for w in temp_str:
+
+        n2w = p.number_to_words(w) # if not a number(e.g. dog) it returns 'zero'
+        cond = (w.isdigit()) and (len(n2w.split())<=mx_splt_num)
+        
+        to_append = n2w if cond else w
+        new_string.append(to_append)
+
+    # Other Numbers become <NUM>
+    text = re.sub(NUM_RE,'<NUM>',' '.join(new_string))
+
+    return text
+
+
+def _remove_simple(text:str) -> str:
+
+    """Does simple cleaning of HTML, and no spaces after commas"""
+
+    # remove html patterns
+  
+    text = re.sub(HTML_RE, '', text)
+
+    # remove issues like: ciao,bella
+    text = SPACES_RE.sub(lambda x: "{} ".format(x.group(1).replace(" ", "")), text)
+
+    return text
+
+
+def _remove_punct(text:str,
+                  to_keep:Optional[str] = "") -> str:
+    '''
+    We remove punctuations so that we don't have different forms of the same word.
+
+    '''
+    punctuation = ''.join(ch for ch in string.punctuation if ch not in to_keep)
+    translator = str.maketrans('', '', punctuation)
+
+    return text.translate(translator)
+
+
+def _remove_stopwords(text:str,
+                      other_stopwords:list[str]|str = None,
+                      to_keep:list[str]|str = None,
+                      lst_output:bool=False) -> list[str]:
+
+    '''
+    Stopwords are words that do not contribute much to the meaning of a sentence
+    hence they can be removed. The NLTK library has a set of 
+    stopwords and we can use these to remove stopwords from our text.     
+    '''
+    
+    stop_words = set(stopwords.words("english"))
+
+    if other_stopwords: stop_words.update(set(other_stopwords))
+    if to_keep: stop_words.discard(set(to_keep))
+
+    word_tokens = word_tokenize(text)
+    clean = [w for w in word_tokens if not w.lower() in stop_words]
+    return clean if lst_output else ' '.join(clean)
+
+    
+def _stem_words(text:list[str]|str,
+                lst_output:bool=True) -> list[str]:
+    '''
+    Stemming is the process of getting the root form of a word.
+    Stem or root is the part to which affixes like -ed, -ize, -de, -s, etc are added.
+    The stem of a word is created by removing the prefix or suffix of a word.
+    
+    '''
+    word_tokens = text if isinstance(text,list) else word_tokenize(text)
+    stems = [stemmer.stem(word) for word in word_tokens]
+    return stems if lst_output else ' '.join(stems)
+
+
+def _lemma_words(text:str,
+                 lst_output:bool=True) -> list[str]:
+    '''
+    Lemmatization is an NLP technique that reduces a word to its root form.
+    This can be helpful for tasks such as text analysis and search as it
+    allows us to compare words that are related but have different forms.
+
+    combines pos_tagging with wordnet_pos for better lemma
+    
+    '''
+
+    iterable = _pos_tagging(text)
+
+    lemmas = [lemmatizer.lemmatize(w,_get_wordnet_pos(p)) for w, p in iterable]
+
+    return lemmas if lst_output else ' '.join(lemmas)
+
+
+def _pos_tagging(text):
+    '''
+    POS tagging is the process of assigning each word in a sentence its grammatical category,
+    such as noun, verb, adjective or adverb. It helps machines understand the structure 
+    and meaning of text, enabling tasks like parsing, information extraction and text analysis.
+
+    NNP: Proper noun
+    NN: Noun (singular)
+    VBZ: Verb (3rd person singular)
+    CC: Conjunction
+
+
+    '''
+    word_tokens = word_tokenize(text)
+    return pos_tag(word_tokens)
+
+
+def _get_wordnet_pos(treebank_tag):
+
+    '''
+    Get wordnet positioning: https://stackoverflow.com/questions/15586721/wordnet-lemmatization-and-pos-tagging-in-python
+    '''
+
+    if treebank_tag.startswith('J'):
+        return wordnet.ADJ
+    elif treebank_tag.startswith('V'):
+        return wordnet.VERB
+    elif treebank_tag.startswith('N'):
+        return wordnet.NOUN
+    elif treebank_tag.startswith('R'):
+        return wordnet.ADV
+    else:
+        return wordnet.NOUN  #default
+
+
+def preprocess_df(df:pd.DataFrame
+                  ) -> pd.DataFrame:
+    '''
+    Perform cleaning on reviews:
+    https://www.geeksforgeeks.org/machine-learning/text-preprocessing-in-python-set-1/
+
+    '''
+    # 0.  x.lower().split() -> lower case and remove extra spaces,
+    # also number conversion (see above)
+    df['num_clean'] = df['review'].apply(lambda x: _convert_nums(" ".join(x.lower().split())))
+
+    # 1 remove html and ciao,bella->ciao, bella
+    df['first_l_cl'] = df['num_clean'].apply(lambda x: _remove_simple(x))
+
+    # 2 remove punctuation
+    df['sec_l_cl'] = df['first_l_cl'].apply(lambda x: _remove_punct(x))
+
+    # 3 remove stopwords 
+    df['no_stopw'] = df['sec_l_cl'].apply(lambda x: _remove_stopwords(x,lst_output= False))
+
+    # 4a lemmas 
+    df['lemmas'] = df['no_stopw'].apply(lambda x: _lemma_words(x, lst_output=True))
+
+    # 5a stemming
+    df['stem'] = df['no_stopw'].apply(lambda x: _stem_words(x, lst_output=True))
+
+    return df
+```
+    
+```{python}
+cleaned = preprocess_df(df)
+
+cleaned.head(15)
+```
+
+
+
+```{python}
+from wordcloud import WordCloud
+import matplotlib.pyplot as plt
+
+# Here we can define some words we dont care about for the sake of these graphs
+stop_words_custom = {"movie", "film"}
+
+# Flatten all lists of stems
+all_text = ' '.join(word for lst in cleaned['lemmas'] for word in lst if word not in  stop_words_custom)
+
+pos_text = ' '.join(word for lst in cleaned[cleaned['sentiment'] == 1]['lemmas'] for word in lst if word not in stop_words_custom)
+neg_text = ' '.join(word for lst in cleaned[cleaned['sentiment'] == 0]['lemmas'] for word in lst if word not in stop_words_custom)
+
+# --- Generate word clouds ---
+def make_wordcloud(text, title, max_words=100):
+    wc = WordCloud(
+        width=800,
+        height=400,
+        background_color='white',
+        max_words=max_words,
+        colormap='viridis'
+    ).generate(text)
+    
+    plt.figure(figsize=(10, 5))
+    plt.imshow(wc, interpolation='bilinear')
+    plt.axis('off')
+    plt.title(title, fontsize=16)
+    plt.show()
+
+# --- Create and display ---
+make_wordcloud(all_text, 'Most Common Words – All Reviews')
+make_wordcloud(pos_text, 'Most Common Words – Positive Reviews (sentiment = 1)')
+make_wordcloud(neg_text, 'Most Common Words – Negative Reviews (sentiment = 0)')
+```
+
+```{python}
+def get_word_counts(series):
+    all_words = [word for lst in series for word in lst if word not in stop_words_custom]
+    return Counter(all_words)
+# --- Compute counts ---
+all_counts = get_word_counts(cleaned['lemmas'])
+pos_counts = get_word_counts(cleaned[cleaned['sentiment'] == 1]['lemmas'])
+neg_counts = get_word_counts(cleaned[cleaned['sentiment'] == 0]['lemmas'])
+
+# ---  Helper function to plot top N words ---
+def plot_top_words(counter, title, n=20):
+    common = counter.most_common(n)
+    words, counts = zip(*common)
+    plt.figure(figsize=(10, 6))
+    plt.barh(words[::-1], counts[::-1], color='skyblue')
+    plt.title(title, fontsize=14)
+    plt.xlabel('Frequency')
+    plt.tight_layout()
+    plt.show()
+
+# ---  Plot all three ---
+plot_top_words(all_counts, 'Top 20 Most Common Words – All Reviews')
+plot_top_words(pos_counts, 'Top 20 Most Common Words – Positive Reviews (sentiment = 1)')
+plot_top_words(neg_counts, 'Top 20 Most Common Words – Negative Reviews (sentiment = 0)')
+```
+# Text representaion
+
+Briefly describe your text representation method. (approx. one or two paragraphs)
+
+# Text clustering
+
+Briefly describe which models you compare to perform clustering. (approx. two or three paragraphs)
+
+# Evaluation & model comparison
+
+Describe how you compare the methods and why. (approx. two or three paragraphs)
+
+
+
+
+# Team member contributions
+
+Write down what each team member contributed to the project.
+
+- Author One: a, b, c
+- Author Two: b, c, d
+- Author Three: a, b, d
