@@ -9,6 +9,5 @@ importlib-metadata==8.0.0
 ipykernel==7.0.1
 jaraco.collections==5.1.0
 nltk==3.9.2
-pip-chill==1.0.3
 seaborn==0.13.2
 tomli==2.0.1
