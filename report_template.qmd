@@ -244,6 +244,22 @@ cleaned = preprocess_df(df)
 cleaned.head(15)
 ```
 
+# Text pre-processing
+Our function preprocess_df, picks up the main cleaning steps in the following order
+1. We set to lower case and remove unnecessary blanks
+2. we convert numbers to strings if below 100, ratings (e.g. 7.5/10,60/100) become < RATING > while expression of years (e.g. 80s/2000) become < YEAR >, while other numbers become < NUM > so that we do not loose information
+3. Upon taking care of numbers, we do a simple clearning to fix some issues: such as html markers (e.g. <\b>) and to add forgotten blanks after commas.
+4. We can now remove the whole punctuations
+5. We apply lemmatization.
+6. We remove stopwords
+
+
+The number cleaning part was done because we believe that numbers in reviews can have different meanings, for example a rating (e.g. 7.5/10) is very different from a year (e.g. 80s) or from a generic number (e.g. 3 actors). Thus we wanted to keep this information while avoiding to have too many different numbers that would not add value to our models.
+
+
+We decided on removing some custom stopwords ourselves aswell. These are movie and film, this choice was made because we saw that they were influencing the results of our models intially, while they do not add any relevant information to the reviews. Since every review is about a movie/film, these words are not relevant for our classification task.
+
+Another choice we made was to do the lemmatization before removing the stopwords, partly because some words mighr become stopwords only after lemmatization and partly because we wanted to keep the context of the words as much as possible before removing them, since lemmatization is context dependent.s
 
 
 ```{python}
