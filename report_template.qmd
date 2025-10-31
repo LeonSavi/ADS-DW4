@@ -12,35 +12,59 @@ format:
     code-fold: true
     df-print: kable
 ---
-
-
-
-# Data description
-
-Describe the data and use a visualization to support your story. (approx. one or two paragraphs)
-
-
-
-
-# Text pre-processing
-
 ```{python}
-import nltk
-import string
-import re
-import gensim
-import inflect
-import optuna
-import pandas as pd
-from typing import Optional
+# INSTALL REQS
+# | echo: true
+# Install dependencies from requirements.txt
+import subprocess, sys
 
+subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+
+```
+```{python}
+import os
+import re
+import string
+import session_info
+from typing import Optional, Tuple, Literal, Any
+from functools import partial
+from collections import Counter
+
+import numpy as np
+import pandas as pd
+
+import seaborn as sns
+import matplotlib.pyplot as plt
+from IPython.display import clear_output
+
+from tqdm import tqdm
+
+import inflect
+import nltk
 from nltk import pos_tag
 from nltk.corpus import stopwords, wordnet
 from nltk.tokenize import word_tokenize
 from nltk.stem import WordNetLemmatizer
-from nltk.stem.porter import PorterStemmer # another 2 kinds of Stemmer (Snowball and Lancaster)
+from nltk.stem.porter import PorterStemmer
 
-from gensim.models import Word2Vec
+from sklearn.feature_extraction.text import TfidfVectorizer, CountVectorizer
+from sklearn.preprocessing import normalize
+from sklearn.decomposition import TruncatedSVD, LatentDirichletAllocation, NMF
+
+
+from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
+
+from sklearn.metrics import (
+    silhouette_score, davies_bouldin_score, calinski_harabasz_score,
+    adjusted_rand_score, normalized_mutual_info_score,
+    v_measure_score, fowlkes_mallows_score
+)
+
+from umap import UMAP
+import ast
+from wordcloud import WordCloud
+
 
 nltk.download('punkt')
 nltk.download('stopwords')
@@ -48,6 +72,8 @@ nltk.download('punkt_tab')
 nltk.download('wordnet')
 nltk.download('omw-1.4')
 nltk.download('averaged_perceptron_tagger_eng')
+
+
 df = pd.read_csv('dataset/imdb_text2vec.csv')
 # regex
 YEAR_RE = re.compile(r"\b((?:18|19|20)\d{2}|[1-9]0['’]?s)\b")         
@@ -59,8 +85,11 @@ HTML_RE = re.compile(r"<(?:\"[^\"]*\"['\"]*|'[^']*'['\"]*|[^'\">])+>")
 p = inflect.engine()
 stemmer = PorterStemmer()
 lemmatizer = WordNetLemmatizer()
+# filter for charts and excels
+qmd = True
 
 df.columns
+
 
 def _convert_nums(text:str,
         mx_splt_num:int = 1) -> str:
@@ -123,7 +152,7 @@ def _remove_punct(text:str,
 
 
 def _remove_stopwords(text:str,
-                      other_stopwords:list[str]|str = None,
+                      other_stopwords:list[str]|str = ['movie','film'],
                       to_keep:list[str]|str = None,
                       lst_output:bool=False) -> list[str]:
 
@@ -135,8 +164,17 @@ def _remove_stopwords(text:str,
     
     stop_words = set(stopwords.words("english"))
 
-    if other_stopwords: stop_words.update(set(other_stopwords))
-    if to_keep: stop_words.discard(set(to_keep))
+    if other_stopwords:
+        if isinstance(other_stopwords, str):
+            stop_words.add(other_stopwords)
+        else:
+            stop_words.update(other_stopwords)
+
+    if to_keep:
+        if isinstance(to_keep, str):
+            stop_words.discard(to_keep)
+        else:
+            stop_words.difference_update(to_keep)
 
     word_tokens = word_tokenize(text)
     clean = [w for w in word_tokens if not w.lower() in stop_words]
@@ -194,7 +232,8 @@ def _pos_tagging(text):
 def _get_wordnet_pos(treebank_tag):
 
     '''
-    Get wordnet positioning: https://stackoverflow.com/questions/15586721/wordnet-lemmatization-and-pos-tagging-in-python
+    Get wordnet positioning.
+    StackOverFlow suggestion: https://stackoverflow.com/questions/15586721/wordnet-lemmatization-and-pos-tagging-in-python
     '''
 
     if treebank_tag.startswith('J'):
@@ -212,10 +251,12 @@ def _get_wordnet_pos(treebank_tag):
 def preprocess_df(df:pd.DataFrame
                   ) -> pd.DataFrame:
     '''
-    Perform cleaning on reviews:
-    https://www.geeksforgeeks.org/machine-learning/text-preprocessing-in-python-set-1/
+    Perform all cleanings on reviews
 
     '''
+    # score_column
+    df['score'] = df['id'].apply(lambda x: x.split('_')[-1])
+
     # 0.  x.lower().split() -> lower case and remove extra spaces,
     # also number conversion (see above)
     df['num_clean'] = df['review'].apply(lambda x: _convert_nums(" ".join(x.lower().split())))
@@ -226,54 +267,88 @@ def preprocess_df(df:pd.DataFrame
     # 2 remove punctuation
     df['sec_l_cl'] = df['first_l_cl'].apply(lambda x: _remove_punct(x))
 
-    # 3 remove stopwords 
-    df['no_stopw'] = df['sec_l_cl'].apply(lambda x: _remove_stopwords(x,lst_output= False))
+    # 3 lemmas: is context dependent if we remove 
+    df['lemmas_pre_stop'] = df['sec_l_cl'].apply(lambda x: _lemma_words(x, lst_output=False))
 
-    # 4a lemmas 
-    df['lemmas'] = df['no_stopw'].apply(lambda x: _lemma_words(x, lst_output=True))
+    # 4 remove stopwords 
+    df['lemmas'] = df['lemmas_pre_stop'].apply(lambda x: _remove_stopwords(x,lst_output= True))
 
-    # 5a stemming
-    df['stem'] = df['no_stopw'].apply(lambda x: _stem_words(x, lst_output=True))
 
-    return df
+    return df    
 ```
     
 ```{python}
-cleaned = preprocess_df(df)
+if qmd:
+    print('Loading Cleaned Data')
+    cleaned = pd.read_csv('dataset/cleaned_df.csv')
+else:
+    cleaned = preprocess_df(df)
+    cleaned.to_csv('dataset/cleaned_df.csv')
+
 
 cleaned.head(15)
 ```
 
-# Text pre-processing
-Our function preprocess_df, picks up the main cleaning steps in the following order
-1. We set to lower case and remove unnecessary blanks
-2. we convert numbers to strings if below 100, ratings (e.g. 7.5/10,60/100) become < RATING > while expression of years (e.g. 80s/2000) become < YEAR >, while other numbers become < NUM > so that we do not loose information
-3. Upon taking care of numbers, we do a simple clearning to fix some issues: such as html markers (e.g. <\b>) and to add forgotten blanks after commas.
-4. We can now remove the whole punctuations
-5. We apply lemmatization.
-6. We remove stopwords
+# Data Description
 
-
-The number cleaning part was done because we believe that numbers in reviews can have different meanings, for example a rating (e.g. 7.5/10) is very different from a year (e.g. 80s) or from a generic number (e.g. 3 actors). Thus we wanted to keep this information while avoiding to have too many different numbers that would not add value to our models.
-
-
-We decided on removing some custom stopwords ourselves aswell. These are movie and film, this choice was made because we saw that they were influencing the results of our models intially, while they do not add any relevant information to the reviews. Since every review is about a movie/film, these words are not relevant for our classification task.
-
-Another choice we made was to do the lemmatization before removing the stopwords, partly because some words mighr become stopwords only after lemmatization and partly because we wanted to keep the context of the words as much as possible before removing them, since lemmatization is context dependent.s
-
-
+For this assignment we use a dataset of movie reviews from IMDB. We decided to clean the data up first before we give a nice overview of what we use. The explanantion of the cleaning will follow below. The only imporant thing to know is that the sentiment is either 0 or 1, with 1 being a review of 7 or higher and 0 being below that. 
 ```{python}
-from wordcloud import WordCloud
-import matplotlib.pyplot as plt
 
-# Here we can define some words we dont care about for the sake of these graphs
+# convert str list to list of strings
+cleaned_lists = pd.DataFrame({
+    'lemmas': cleaned['lemmas'].apply(
+        lambda x: ast.literal_eval(x) if isinstance(x, str) else x
+    ),
+    'sentiment': cleaned['sentiment']
+})
+
+
 stop_words_custom = {"movie", "film"}
 
-# Flatten all lists of stems
-all_text = ' '.join(word for lst in cleaned['lemmas'] for word in lst if word not in  stop_words_custom)
+def get_word_counts(series):
+    all_words = [word for lst in series for word in lst if word not in stop_words_custom]
+    return Counter(all_words)
+# --- Compute counts ---
+all_counts = get_word_counts(cleaned_lists['lemmas'])
+pos_counts = get_word_counts(cleaned_lists[cleaned_lists['sentiment'] == 1]['lemmas'])
+neg_counts = get_word_counts(cleaned_lists[cleaned_lists['sentiment'] == 0]['lemmas'])
 
-pos_text = ' '.join(word for lst in cleaned[cleaned['sentiment'] == 1]['lemmas'] for word in lst if word not in stop_words_custom)
-neg_text = ' '.join(word for lst in cleaned[cleaned['sentiment'] == 0]['lemmas'] for word in lst if word not in stop_words_custom)
+# ---  Helper function to plot top N words ---
+def plot_top_words(counter, title, n=20):
+    common = counter.most_common(n)
+    words, counts = zip(*common)
+    plt.figure(figsize=(10, 6))
+    plt.barh(words[::-1], counts[::-1], color='skyblue')
+    plt.title(title, fontsize=14)
+    plt.xlabel('Frequency')
+    plt.tight_layout()
+    plt.show()
+
+# ---  Plot all three ---
+plot_top_words(all_counts, 'Top 20 Most Common Words – All Reviews')
+plot_top_words(pos_counts, 'Top 20 Most Common Words – Positive Reviews (sentiment = 1)')
+plot_top_words(neg_counts, 'Top 20 Most Common Words – Negative Reviews (sentiment = 0)')
+```
+These are the top 20 most common lemmatized words across all reviews and reviews with either a good or a bad sentiment. We can see that words like bad score way higher on the negative reviews. This is to be expected but good to see. A lot of words appear in both, these words dont necessarily indicate if something is bad or good.
+
+```{python}
+all_text = ' '.join(
+    word for lst in cleaned_lists['lemmas']
+    for word in lst
+    if word not in stop_words_custom
+)
+
+pos_text = ' '.join(
+    word for lst in cleaned_lists[cleaned_lists['sentiment'] == 1]['lemmas']
+    for word in lst
+    if word not in stop_words_custom
+)
+
+neg_text = ' '.join(
+    word for lst in cleaned_lists[cleaned_lists['sentiment'] == 0]['lemmas']
+    for word in lst
+    if word not in stop_words_custom
+)
 
 # --- Generate word clouds ---
 def make_wordcloud(text, title, max_words=100):
@@ -296,51 +371,818 @@ make_wordcloud(all_text, 'Most Common Words – All Reviews')
 make_wordcloud(pos_text, 'Most Common Words – Positive Reviews (sentiment = 1)')
 make_wordcloud(neg_text, 'Most Common Words – Negative Reviews (sentiment = 0)')
 ```
+Here we have made wordclouds for the same groups as before. These include the top 100 words for each category with the bigger words being more common.
 
-```{python}
-def get_word_counts(series):
-    all_words = [word for lst in series for word in lst if word not in stop_words_custom]
-    return Counter(all_words)
-# --- Compute counts ---
-all_counts = get_word_counts(cleaned['lemmas'])
-pos_counts = get_word_counts(cleaned[cleaned['sentiment'] == 1]['lemmas'])
-neg_counts = get_word_counts(cleaned[cleaned['sentiment'] == 0]['lemmas'])
 
-# ---  Helper function to plot top N words ---
-def plot_top_words(counter, title, n=20):
-    common = counter.most_common(n)
-    words, counts = zip(*common)
-    plt.figure(figsize=(10, 6))
-    plt.barh(words[::-1], counts[::-1], color='skyblue')
-    plt.title(title, fontsize=14)
-    plt.xlabel('Frequency')
-    plt.tight_layout()
-    plt.show()
+# Text pre-processing
+Our function preprocess_df, picks up the main cleaning steps in the following order
+1. We set to lower case and remove unnecessary blanks
+2. we convert numbers to strings if below 100, ratings (e.g. 7.5/10,60/100) become < RATING > while expression of years (e.g. 80s/2000) become < YEAR >, while other numbers become < NUM > so that we do not loose information
+3. Upon taking care of numbers, we do a simple clearning to fix some issues: such as html markers (e.g. <\b>) and to add forgotten blanks after commas.
+4. We can now remove the whole punctuations
+5. We apply lemmatization.
+6. We remove stopwords
 
-# ---  Plot all three ---
-plot_top_words(all_counts, 'Top 20 Most Common Words – All Reviews')
-plot_top_words(pos_counts, 'Top 20 Most Common Words – Positive Reviews (sentiment = 1)')
-plot_top_words(neg_counts, 'Top 20 Most Common Words – Negative Reviews (sentiment = 0)')
-```
-# Text representaion
 
+The number cleaning part was done because we believe that numbers in reviews can have different meanings, for example a rating (e.g. 7.5/10) is very different from a year (e.g. 80s) or from a generic number (e.g. 3 actors). Thus we wanted to keep this information while avoiding to have too many different numbers that would not add value to our models.
+
+
+We decided on removing some custom stopwords ourselves aswell. These are movie and film, this choice was made because we saw that they were influencing the results of our models intially, while they do not add any relevant information to the reviews. Since every review is about a movie/film, these words are not relevant for our classification task.
+
+Another choice we made was to do the lemmatization before removing the stopwords, partly because some words mighr become stopwords only after lemmatization and partly because we wanted to keep the context of the words as much as possible before removing them, since lemmatization is context dependent.
+
+
+# Text Representation
+
+The _modelPreprocessing() function applies model-specific text vectorisation before training:
+
+- Reviews were first tokenised and lemmatised, following the steps described above.
+
+- For LDA we use CountVectorizer, while for other models we use IDF-TF matrix inputs. According to our searches in stackoverflow (See below for links), LDA models probabilities of word occurrences, whereas TF-IDF is a re-weighting scheme that breaks the probabilistic foundation, thefore Counter is more suited for the task. For both vectorizers, we assigned the max number of components of 50000, and we kept words that appear in at least 5 reviews (min_df), and removed words that appear in 90% of those (max_df). A brief description of the two preprocessing techniques:
+    - Count Vectorizer: tokenizes the text along with performing very basic preprocessing. It removes the punctuation marks and converts all the words to lowercase. Therefore a vocabulary is formed. An encoded vector is returned with a length of the entire vocabulary and an integer count for the number of times each word appeared in the document.
+    - TF-IDF Vectorizer: This is a statistical method evaluates how important a word is to a document in relation to a larger collection of documents. TF-IDF combines two components:
+        1. Term Frequency (TF): Measures how often a word appears in a document. A higher frequency suggests greater importance. If a term appears frequently in a document, it is likely relevant to the document’s content.
+        2. Inverse Document Frequency (IDF): Reduces the weight of common words across multiple documents while increasing the weight of rare words. If a term appears in fewer documents, it is more likely to be meaningful and specific.
+
+- We do an additional step for VKM and GMM, that is the component reduction with SVDTruncated. We decided to not use PCA, as SVD seems to be much better with sparse dataset and text data represented as term-document matrices, and it is less computationally demanding. In our case we reduced to 200 components.
+
+## Model fitting and storage
+
+The dct_MLmodels() function trains each model for k=2 to k=10 clusters and stores results in a structured dictionary (dct_models).
+For each configuration, the function saves:
+
+- the fitted model object,
+
+- predicted cluster labels,
+
+- the dense feature representation,
+
+- ground-truth sentiment labels,
+
+- for GMM also AIC and BIC, useful for comparing model complexity and goodness-of-fit.
+
+This design allows consistent downstream evaluation (e.g., internal/external validation metrics, interpretability analysis, and UMAP visualisation) while maintaining a high level of code clarity and computational reproducibility.
 Briefly describe your text representation method. (approx. one or two paragraphs)
 
+```{python}
+def _clusterSelection(model:Literal["LDA","NMF",'VKM', 'GMM'],
+                      k:int = None,
+                      rs_seed:int=1
+                      ) -> Any:
+    """
+    Return the clustering model object and its Optuna parameter space.
+    model: one of ['SKM', 'GMM', 'SPEC']
+    """
+    match model:
+        case 'VKM':
+            ml_model = KMeans(
+                n_clusters=k,
+                random_state=rs_seed,
+                init='k-means++',
+                n_init=10,
+                max_iter=500
+            )
+
+        case 'GMM':
+            ml_model = GaussianMixture(
+                n_components=k,
+                covariance_type='full',
+                init_params='kmeans',
+                max_iter = 300,
+                random_state=rs_seed,
+                verbose=False
+            )
+
+        case 'LDA':
+            ml_model = LatentDirichletAllocation(
+                n_components=k,
+                random_state=rs_seed,
+                learning_method='batch',
+                learning_offset=10.0,
+                max_iter=50,
+                n_jobs=-1
+            )
+
+        case 'NMF':
+            ml_model = NMF(
+                n_components=k,
+                init='nndsvda',
+                solver='cd',                 
+                beta_loss='frobenius',       
+                max_iter=2000,     
+                tol=1e-4,
+                random_state=rs_seed
+            )
+
+    return ml_model
+
+
+def _modelPreprocessing(df:pd.DataFrame,
+                        model:str,
+                        svd_comp:int=200,
+                        max_features:int=50000,
+                        min_df:float|int = 5, # keep the word if appears in at least 5 reviews
+                        max_df:float|int = 0.9, # delete words that apper in 90% of the reviews
+                        sd:int=1) -> Tuple[np.ndarray, np.ndarray]:
+    """
+    Data Preprocessing for the models, ensure right format and apply min_df and max_df
+    - GMM, VKM: TFIDF + SVDtrucanted
+    - NMF: TFIDF
+    - LDA: Count Vectorizer
+
+    return sentiment labels and model inputs
+
+    """
+    labels = df['sentiment'].to_numpy()
+    labels10 = df['score'].to_numpy()
+
+    in_text = df['lemmas'].apply(
+        lambda x: " ".join(x) if isinstance(x, list) 
+        else x)
+        
+    vectorizer = TfidfVectorizer(
+            max_features=max_features,
+            stop_words='english',
+            min_df=min_df,
+            max_df=max_df
+        )
+
+    match model:            
+        case "GMM"|'VKM':
+            tf_idf = vectorizer.fit_transform(in_text)
+            reducer = TruncatedSVD(n_components=svd_comp, random_state=sd)
+            x = reducer.fit_transform(tf_idf).astype(np.float32)
+
+        case "NMF":
+            x = vectorizer.fit_transform(in_text)
+
+        case "LDA":
+            count_vec = CountVectorizer(
+                max_features=max_features,
+                stop_words="english",
+                min_df=min_df,
+                max_df=max_df)
+            x = count_vec.fit_transform(in_text)
+
+    return x, labels, labels10
+
+
+def dct_MLmodels(df: pd.DataFrame,
+                 models: list[str] = ["LDA","NMF",'VKM','GMM'],
+                 svd_comp: int = 200,
+                 rs_seed: int = 1) -> dict:
+    """
+    Train all clustering models once per specified k and store results.
+    Returns a dictionary with all fitted models, embeddings, and labels.
+    """
+
+    dct_models = {}
+
+    for model in models:
+        clear_output(wait=True)
+        print(f"Training {model} model!\n")
+
+        v, labels, labels10 = _modelPreprocessing(df, model, svd_comp=svd_comp)
+
+        for k in range(2,11):
+            ml_model = _clusterSelection(model, k, rs_seed=rs_seed)
+
+            if model in ['LDA', 'NMF']:
+                doc_topic = ml_model.fit_transform(v)
+                preds = doc_topic.argmax(axis=1)
+                vals_dense = normalize(doc_topic)
+
+            else:
+                preds = ml_model.fit_predict(v)
+                if hasattr(v, "toarray"):
+                    vals_dense = v.toarray()
+                else:
+                    vals_dense = v
+
+            key = f"{model}_{k}"
+            dct_models[key] = {
+                "model": ml_model,
+                "preds": preds,
+                "vals": vals_dense,
+                "labels": labels,
+                "labels10": labels10,
+                "aic": ml_model.aic(vals_dense) if model == 'GMM' else None,
+                "bic":ml_model.bic(vals_dense) if model == 'GMM' else None
+            }
+    clear_output()
+    return dct_models
+```
 # Text clustering
 
-Briefly describe which models you compare to perform clustering. (approx. two or three paragraphs)
+## Model selection
 
+The _clusterSelection() function dynamically returns an instance of the selected clustering algorithm given a model name and a number of clusters.
+
+We implemented the following models :
+
+1. K-Means (VKM)
+
+Type: Centroid-based, non-probabilistic clustering
+Input: TF-IDF feature vectors (cosine-normalized)
+Goal: Partition documents into k clusters based on similarity in vector space
+
+### How it works:
+
+Each document is represented as a high-dimensional TF-IDF vector (term frequency–inverse document frequency), which captures how important each word is to that document relative to the corpus. K-Means starts by selecting k random “centroids” (one per cluster).
+
+Then it iteratively:
+
+1. Assigns each document to the nearest centroid (here, using cosine similarity instead of Euclidean distance).
+2. Recomputes each centroid as the mean of the vectors in its cluster.
+3. This repeats until the cluster assignments stop changing (convergence).
+
+### Pros
+
+- Fast, simple, and works well on large, sparse text data when using TF-IDF.
+- Produces distinct, non-overlapping clusters.
+
+### Cons
+
+Assumes clusters are roughly spherical and of similar size.
+
+Not probabilistic, each document belongs to exactly one cluster.
+
+
+2. Gaussian Mixture Models (GMM)
+
+Type: Probabilistic (soft) clustering
+Input: Continuous feature vectors (here, TF-IDF representations)
+Goal: Represent data as a mixture of multiple Gaussian distributions
+
+### How it works:
+
+GMM assumes that the data are generated by k Gaussian distributions (each one corresponds to a cluster).
+
+Each cluster has parameters:
+
+- Mean vector (center)
+- Covariance matrix (shape/volume)
+- Mixing weight (how common the cluster is)
+
+The algorithm uses the Expectation–Maximisation (EM) procedure:
+
+- E-step: Compute the probability that each document belongs to each cluster.
+- M-step: Update the Gaussian parameters to maximize the likelihood of the observed data.
+
+Initialization is done using K-Means centroids to ensure stability.
+
+### Pros:
+
+- Soft clustering: each document gets a probability of belonging to each cluster.
+- Can model clusters of different shapes and densities (unlike K-Means).
+
+### Cons
+
+- Computationally heavier than K-Means.
+- Sensitive to initialization and covariance structure.
+- Assumes data roughly follow a Gaussian shape (which may not be true for TF-IDF).
+
+
+3. Latent Dirichlet Allocation (LDA)
+
+Type: Probabilistic topic model
+Input: Word-count vectors (not TF-IDF)
+Goal: Represent each document as a mixture of topics, where each topic is a distribution over words
+
+### How it works:
+
+LDA assumes a generative process:
+
+- Each document has its own distribution over k latent topics.
+- Each topic is a distribution over words.
+- For each word in a document, a topic is chosen from the document’s topic distribution, and then a word is drawn from that topic’s word distribution.
+
+Training (via variational inference or Gibbs sampling) estimates:
+
+- The topic–word distributions
+- The document–topic distributions
+
+### Pros:
+
+- Produces human-interpretable topics.
+- Handles polysemy (same word with multiple meanings) via topic mixtures.
+
+### Cons
+
+- Requires raw counts, not TF-IDF.
+- Sensitive to hyperparameters (α, β) and number of topics.
+
+
+
+4. Non-negative Matrix Factorisation (NMF)
+
+Type: Matrix factorisation / topic modeling
+Input: TF-IDF matrix (non-negative values)
+Goal: Factorise the document-term matrix into interpretable latent components
+
+### How it works:
+
+Given a document–term matrix 
+𝑉 (size: documents × words):
+
+𝑉≈𝑊×𝐻
+
+𝑊: document–topic matrix (each row shows how much each topic contributes to the document)
+𝐻: topic–term matrix (each column shows how much each word contributes to the topic)
+The factorisation is constrained so that all entries are non-negative, which encourages parts-based, interpretable representations (e.g., topics as sets of positively weighted words).
+
+Training is usually done by minimizing reconstruction error via iterative updates (multiplicative or coordinate descent). The non-negativity constraint and deterministic initialization improve reproducibility.
+
+### Pros:
+
+- Produces interpretable topics similar to LDA but often simpler and faster.
+- Works directly on TF-IDF features.
+- Deterministic initializations make it stable and reproducible.
+
+### Cons
+
+- Produces “soft” associations but not probabilistic ones.
+- Can get stuck in local minima (hence long iteration limits help).
+
+```{python}
+def Clusters_Indicators(df:pd.DataFrame,
+                ml_dct:dict,
+                 models:list[str] = ["LDA","NMF",'VKM', 'GMM'],
+                 sd:int = 1,
+                 svd_comp:int=200,
+                 labels10:bool = False
+                 ) -> pd.DataFrame:
+    
+    """
+    Test Models three selected models for 5 to 10 number of clusters.
+    Return a pandas df with outputs
+    """
+
+    res_dct = {
+        'model':[],
+        'n_clusters':[],
+        'sil':[],
+        'dbi':[],
+        'ari':[],
+        'chi':[],
+        'nmi': [],
+        'vmeasure': [],
+        'fmi': [],
+        'aic':[],
+        'bic':[]}
+
+    for model in models:
+        v, _, _ = _modelPreprocessing(df, model, svd_comp=svd_comp)
+        clear_output()
+        print(f'Working on {model}')
+        for n_clusters in range(2,11):
+
+            model_ref = ml_dct[f'{model}_{n_clusters}']
+            vals_dense = model_ref['vals']
+            labels = model_ref['labels'] if not labels10 else model_ref['labels10']
+            preds = model_ref['preds']
+            aic = model_ref['aic']
+            bic = model_ref['bic']
+
+            res_dct['model'].append(model)
+            res_dct['n_clusters'].append(n_clusters)
+            res_dct['sil'].append(silhouette_score(v, preds, metric='cosine',random_state=sd)) #internal
+            res_dct['dbi'].append(davies_bouldin_score(vals_dense, preds)) #internal
+            res_dct['ari'].append(adjusted_rand_score(labels, preds)) #external
+
+            res_dct['chi'].append(calinski_harabasz_score(vals_dense, preds)) #internal
+            res_dct['nmi'].append(normalized_mutual_info_score(labels, preds)) # external
+            res_dct['vmeasure'].append(v_measure_score(labels, preds)) #external
+            res_dct['fmi'].append(fowlkes_mallows_score(labels, preds)) #external
+            #gmm
+            res_dct['aic'].append(aic)
+            res_dct['bic'].append(bic)
+            
+    return pd.DataFrame(res_dct)
+
+
+def comparison_charts(df:pd.DataFrame,
+                      indicators: list[str]=['sil','dbi','chi','ari','nmi','fmi'], #only most relevant
+                      labels10:bool = False)->None:
+
+    """
+    Create a 2x3 grid of subplots comparing models across validation indicators.
+    Each subplot shows scores for all models as a function of n_clusters.
+    The metrics to plot (3 internal + 3 external)
+    """
+
+
+    sns.set_context("notebook")
+    sns.set_style("white")
+
+
+    fig, axes = plt.subplots(2 if len(indicators)>3 else 1,
+                             3, figsize=(12, 6), sharex=True)
+    axes = axes.flatten()
+
+    model_palette = sns.color_palette("deep", n_colors=df['model'].nunique())
+    hue_order = sorted(df['model'].unique())
+
+    handles, labels = None, None # init
+
+    for i, ind in enumerate(indicators):
+        ax = axes[i]
+
+        if ind not in df.columns:
+            ax.set_visible(False)
+            continue
+
+        plot = sns.lineplot(
+            data=df,
+            x='n_clusters',
+            y=ind,
+            hue='model',
+            hue_order=hue_order,
+            marker='o',
+            linewidth=1.3,
+            ax=ax,
+            palette=model_palette
+        )
+
+        if handles is None:
+            handles, labels = plot.get_legend_handles_labels()
+
+        leg = ax.get_legend()
+        if leg:
+            leg.remove()
+
+        ax.set_title(ind.upper(), fontsize=9, weight='bold', pad=3)
+        ax.set_xlabel('')
+        ax.set_ylabel('')
+        ax.tick_params(labelsize=8)
+        ax.spines[['top','right']].set_visible(False)
+        ax.grid(False)
+
+        if ind == 'dbi':
+            ax.invert_yaxis()
+
+    if handles and labels:
+        fig.legend(
+            handles, labels,
+            loc='upper center',
+            ncol=len(hue_order),
+            frameon=False,
+            fontsize=9,
+            handlelength=2.0
+        )
+
+    plt.subplots_adjust(wspace=0.3, hspace=0.25, top=0.88)
+    plt.savefig(f"""charts/
+                indicators_svd{'_l10' if labels10 else ''}.png""")
+    plt.show()
+
+
+
+
+def cluster_charts(ml_dct:dict,
+                   models: list[str] = ["LDA","NMF",'VKM','GMM'],
+                   umap_metric:Literal['cosine','euclidean','manhattan'] = 'euclidean',
+                   sd: int = 1) -> None:
+    """
+    Visualize clusters (k=5 and k=10) for each model in a 2x6 grid.
+
+    Each subplot shows a 2D UMAP projection of the clustered space.
+    Works for dense and sparse data (TF-IDF, embeddings, etc.)
+    """
+
+    sns.set_context("notebook")
+    sns.set_style("white")
+    fig, axes = plt.subplots(3, len(models), figsize=(3.5*len(models), 7))
+
+    for col, model in enumerate(models):
+        clear_output()
+        for idx, n_clusters in enumerate([2, 5, 10]):
+
+            model_ref = ml_dct[f'{model}_{n_clusters}']
+            vals_dense = model_ref['vals']
+            labels = model_ref['labels']
+            preds = model_ref['preds']
+            
+            ari = adjusted_rand_score(labels, preds)
+            nmi = normalized_mutual_info_score(labels, preds)
+
+            reducer = UMAP(
+                n_neighbors=15,
+                n_components=2,
+                metric=umap_metric,
+                random_state=sd,
+                n_jobs=-1
+            )
+
+            X_2d = reducer.fit_transform(vals_dense)
+
+            ax = axes[idx, col] 
+
+            sns.scatterplot(
+                    x=X_2d[:, 0], y=X_2d[:, 1],
+                    hue=preds,
+                    palette='tab10',
+                    s=10, alpha=0.8, linewidth=0,
+                    ax=ax, legend=False
+                )
+
+            ax.set_title(f"{model} | k={n_clusters}\nARI={round(ari,3)}, NMI={round(nmi,3)}",
+             fontsize=9, weight='bold', pad=3)
+            ax.set_xticks([]); ax.set_yticks([])
+            ax.spines[['top', 'right', 'bottom', 'left']].set_visible(False)
+
+    plt.suptitle(f"Cluster Visualization (UMAP 2D {umap_metric.title()} Projection)",
+                 fontsize=12, weight='bold', y=0.98)
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.savefig(f'charts/clusters_svd{umap_metric}.png')
+    plt.show()
+
+
+
+
+def plot_ic(comparison: pd.DataFrame) -> None:
+    """
+    Plot AIC and BIC vs number of clusters for the GMM model only.
+    """
+    gmm_df = comparison.query("model == 'GMM'")[["n_clusters", "aic", "bic"]].dropna()
+
+    plot_df = gmm_df.melt(id_vars="n_clusters", var_name="criterion", value_name="score")
+
+    sns.set_context("talk")
+    sns.set_style("whitegrid")
+
+    plt.figure(figsize=(6, 4))
+    ax = sns.lineplot(
+        data=plot_df,
+        x="n_clusters",
+        y="score",
+        hue="criterion",
+        marker="o",
+        linewidth=1.4,
+        palette=["#005AA7", "#A70000"],
+        alpha=0.9
+    )
+    
+    ax.spines[['top','right']].set_visible(False)
+    ax.grid(False)
+
+    ax.set_title("GMM - BIC vs AIC\n", fontsize=12, weight="bold")
+    ax.set_xlabel("N of Clusters (k)", fontsize=10)
+    ax.set_ylabel("Score", fontsize=10)
+
+    # plt.tight_layout()
+    plt.savefig('charts/GMM_IC.png')
+    plt.show()
+
+
+def plot_top_terms(df: pd.DataFrame,
+                   ml_dct: dict,
+                   models: list[str] = ["LDA", "NMF"],
+                   top_n: int = 10,
+                   k_values: list[int] = [2, 5, 10],
+                   max_features:int = 50000,
+                   min_df:float|int = 5, # keep the word if appears in at least 5 reviews
+                   max_df:float|int = 0.9, # delete words that apper in 90% of the reviews
+                   ) -> None:
+    """
+    Plot top-n terms per topic for LDA and NMF.
+    Layout:
+      - k <= 5  -> 1 x k
+      - 6..10   -> 2 x 5
+      - >10     -> ceil(k/5) x 5  (general case)
+    Minimalist, high data-to-ink ratio.
+    """
+
+    sns.set_style("whitegrid")
+    sns.set_context("notebook")
+
+    # Prepare corpus once
+    in_text = df['lemmas'].apply(lambda x: " ".join(x) if isinstance(x, list) else x)
+    in_text = in_text[in_text.str.strip().astype(bool)]
+
+    # Fit vectorisers once
+    tfidf_vec = TfidfVectorizer(
+        max_features=max_features, stop_words='english', min_df=min_df, max_df=max_df
+    ).fit(in_text)
+
+    count_vec = CountVectorizer(
+        max_features=max_features, stop_words="english", min_df=min_df, max_df=max_df
+    ).fit(in_text)
+
+    for model in models:
+        for k in k_values:
+            key = f"{model}_{k}"
+
+            ml_model = ml_dct[key]["model"]
+            components = ml_model.components_
+            n_topics = components.shape[0]
+
+            vectorizer = count_vec if model == "LDA" else tfidf_vec
+            feature_names = np.array(vectorizer.get_feature_names_out())
+
+            if k <= 5:
+                nrows, ncols = 1, k
+            elif k <= 10:
+                nrows, ncols = 2, 5
+
+            fig_w = max(4, 3.2 * ncols) #added because we want multiple chart for each k
+            fig_h = max(3.2, 2.8 * nrows)
+
+            fig, axes = plt.subplots(nrows, ncols, figsize=(fig_w, fig_h))
+            if isinstance(axes, np.ndarray):
+                axes = axes.ravel()
+            else:
+                axes = [axes]
+
+            for i in range(nrows * ncols):
+                ax = axes[i]
+                if i >= n_topics:
+                    ax.axis("off")
+                    continue
+
+                top_idx = components[i].argsort()[::-1][:top_n]
+                top_words = feature_names[top_idx]
+                top_weights = components[i][top_idx]
+
+                sns.barplot(
+                    x=top_weights, y=top_words,
+                    hue=top_words, legend=False,  # explicit hue for colouring
+                    palette=("Greens_r" if model == "LDA" else "Blues_r"),
+                    ax=ax, edgecolor="none"
+                )
+                ax.set_title(f"Topic {i+1}", fontsize=9, weight="bold", pad=3)
+                ax.set_xlabel("")
+                ax.set_ylabel("")
+                ax.tick_params(axis="x", labelsize=7)
+                ax.tick_params(axis="y", labelsize=8)
+                ax.spines[['top','right']].set_visible(False)
+                ax.grid(False, axis="x")
+
+            plt.suptitle(f"{model} - Top {top_n} Terms per Topic (k={k})",
+                         fontsize=12, weight="bold", y=0.995)
+            plt.tight_layout(rect=[0, 0, 1, 0.97])
+            plt.savefig(f"charts/{model.lower()}_topterms_k{k}.png", dpi=300, bbox_inches="tight")
+            plt.show()
+
+
+def plot_sentiment_cluster_panel(ml_dct: dict,
+                                 models: list = ["LDA","NMF","VKM","GMM"],
+                                 k_values: list = [2, 5, 10],
+                                 normalize: str = "col",     # "col", "row", or "none"
+                                 show_cbar: bool = True,
+                                 figsize_per_cell: tuple = (4.6, 3.1),
+                                 cmap: str = "Blues") -> None:
+    """
+    Grid of Sentiment per Cluster heatmaps with models in rows and k in columns.
+    """
+
+    sns.set_style("white")
+    sns.set_context("notebook")
+
+    n_rows = len(models)
+    n_cols = len(k_values)
+
+    # Figure size scales with grid
+    fig_w = max(8, figsize_per_cell[0] * n_cols)
+    fig_h = max(5, figsize_per_cell[1] * n_rows)
+    fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_w, fig_h), squeeze=False)
+
+    last_im = None
+    fmt = ".2f" if normalize != "none" else "d"
+    ttl_norm = {"col": "col-norm", "row": "row-norm", "none": "counts"}[normalize]
+
+    for r, model in enumerate(models):
+        for c, k in enumerate(k_values):
+            ax = axes[r, c]
+            key = f"{model}_{k}"
+
+            labels = ml_dct[key]["labels"]
+            preds  = ml_dct[key]["preds"]
+
+            tab = pd.crosstab(pd.Series(labels, name="sentiment"),
+                              pd.Series(preds,  name="cluster")).sort_index(axis=1)
+
+            if normalize == "col":
+                denom = tab.sum(axis=0).replace(0, np.nan)
+                view = tab.divide(denom, axis=1)
+            elif normalize == "row":
+                denom = tab.sum(axis=1).replace(0, np.nan)
+                view = tab.divide(denom, axis=0)
+            else:
+                view = tab
+
+            im = sns.heatmap(
+                view, cmap=cmap, annot=True, fmt=fmt, cbar=False,
+                linewidths=0.25, linecolor="white", ax=ax
+            )
+
+            ax.set_title(f"{model} - k={k} ({ttl_norm})", fontsize=10, weight="bold", pad=4)
+            ax.set_xlabel("Cluster" if r == n_rows - 1 else "", fontsize=9)
+            ax.set_ylabel("Sentiment" if c == 0 else "", fontsize=9)
+
+            # Clean spines
+            for sp in ["top","right","left","bottom"]:
+                ax.spines[sp].set_visible(False)
+
+    plt.tight_layout()
+    plt.savefig("charts/sentiment_cluster_panel.png", dpi=300, bbox_inches="tight")
+    plt.show()
+```
+
+```{python}
+# training all the models
+test_models =['NMF','LDA','VKM','GMM']
+dct_models = dct_MLmodels(cleaned,models = test_models)
+```
+
+```{python}
+import umap
+print("UMAP version:", umap.__version__)
+print("Loaded from:", umap.__file__)
+
+
+```
 # Evaluation & model comparison
+```{python}
+# get indicators
+comparisons = Clusters_Indicators(cleaned,models=test_models,ml_dct=dct_models)
+comparisons10 = Clusters_Indicators(cleaned,models=test_models,ml_dct=dct_models,labels10=True)
+clear_output()
+display(comparisons)
+comparison_charts(comparisons)
+if not qmd:
+    comparisons.to_csv(f'outputs/Indicators_Comparison_svd.csv')
+```
 
-Describe how you compare the methods and why. (approx. two or three paragraphs)
+Here above we can see the results of the various models on some measurement scales. We graphed the most important ones. We decided to train the models from k2 all the way to k10 so we can see a gradual overview of what happens when increasing the k.
+
+### Clusters_Indicators
+
+Below are the metrics we decided to use along with a short explanantion on all of them.
+
+- Metrics: Silhouette, Davies–Bouldin (DBI), Calinski–Harabasz (CHI), ARI, NMI, V-measure, FMI; plus AIC/BIC for GMM.
+
+- Description:
+    - Silhouette: Measures cohesion and separation between clusters. Values range from –1 to 1; higher scores indicate well-separated, dense clusters.
+
+    - Davies–Bouldin Index (DBI): Ratio of within- to between-cluster distances. Lower values indicate better defined, more distinct clusters.
+
+    - Calinski–Harabasz Index (CHI): Variance ratio of between- to within-cluster dispersion. Higher scores mean greater separation and compactness.
+
+    - Adjusted Rand Index (ARI): Compares predicted clusters with true labels, correcting for chance. Higher = better agreement.
+
+    - Normalised Mutual Information (NMI): Measures shared information between predicted and true labels; ranges 0–1, higher = stronger match.
+
+    - V-measure: Harmonic mean of homogeneity and completeness; higher values indicate balanced and consistent clustering.
+
+    - Fowlkes–Mallows Index (FMI): Geometric mean of precision and recall between cluster and label pairs; higher values denote greater similarity.
+
+    - Akaike (AIC) & Bayesian (BIC) Information Criteria: Penalised likelihood scores used only for GMM to compare model fit versus complexity; lower = more parsimonious, better-fitting model.
 
 
+How to interpret: 
 
+Higher is better for: Sil/CHI/ARI/NMI/V/FMI, lower is better for: DBI/AIC/BIC. Another imporant thing is to look for consistent winners across metrics rather than a single spike.
+
+Along with these measure we also have some other charts to get a better view of what is happening.
+
+
+### cluster_charts
+```{python}
+cluster_charts(ml_dct=dct_models,models=test_models,umap_metric ='manhattan')
+```
+
+Above is the chart which shows the clustering at k2, k5 and k10. This is shown for all our four models. While it may be hard to interpret, intuitively we see that the two models on the left seem to seperate the clusters better. The other two models, GMM and VKM look way more chaotic, the different clusters are all overlapping. Along with the visual overview there is also a score for ARI and NMI which can be interpreted as higher equals better. Lower scores on these measures can mean that the model is bad or that the k is unsuitable. We believe poor performance across the 3 shown k's are a pretty good indication of general performance. 
+
+### plot_ic
+```{python}
+plot_ic(comparisons)
+```
+
+- Metrics: AIC and BIC across k (GMM only).
+
+- Why important: Penalised likelihood for principled model selection.
+
+- How to interpret: Choose k at the minimum of BIC (usually stricter); if AIC and BIC disagree, BIC is typically preferred.
+
+```{python}
+plot_top_terms(cleaned,dct_models)
+```
+
+This plot shows the top 10 terms for each topic that was used to form a cluster across k2, k5 and k10 for the models that use topic modelling. These plots make the algorithm a lot more intuitive for us to look at, we can see what words the model decided to put together to form a cluster. While we can not measure the words with a number like the previous plot, we can interpret the meaning of the words to see if we agree with the grouping. An example of a group which went well is topic 7 for the nmf model in k10. We can see words like: horror, zombie, gore and scary. To us this makes a lot of sense and gives us confidence in the clustering that was made by this model in this specific k.
+
+### plot_sentiment_cluster_panel
+
+```{python}
+plot_sentiment_cluster_panel(dct_models, normalize="col")
+```
+
+This plot shows the spread of the reviews for k clusters based on the sentiment. This plot does not give us much information about the general performance but we can compare the clusters with the only known seperation we have from the dataset, the sentiment. This sentiment is either 1 or 0 with 1 being a 7 or higher and a 0 being lower than that. With k=2 we see that the sentiment does play an important role in the clustering, with all the models deciding to mostly include reviews of the same sentiment together. As the k increases to 5 and 10 we see that there are a lot of clusters which include a roughly 50/50 spread of positive and negative reviews, meaning that the clustering was done on some other factor like the horror example we saw earlier. We can however also see that each model at both k=5 and k=10 still have atleast one cluster which include almost only positive or negative reviews. Meaning that it still does group on sentiment aswell.
 
 # Team member contributions
 
 Write down what each team member contributed to the project.
 
-- Author One: a, b, c
-- Author Two: b, c, d
-- Author Three: a, b, d
+- Leonardo Savianne: Data preparation, made the code for the models and the graphs in the results.
+- Thomas Rietman: Wrote the story, explained the models interpreted the results, cleanup and putting it all together.
+- Angelos Papoutsis: Review
