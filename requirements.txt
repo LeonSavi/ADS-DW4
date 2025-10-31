@@ -1,21 +1,136 @@
-numpy==2.3.4
-pandas==2.3.3
-scipy==1.16.2
-
-scikit-learn==1.7.2
-gensim==4.4.0
+aiohttp==3.13.1
+alembic==1.17.0
+backports.tarfile==1.2.0
+colorlog==6.10.1
+datasets==4.2.0
+hdbscan==0.8.40
+importlib-metadata==8.0.0
+ipykernel==7.0.1
+jaraco.collections==5.1.0
 nltk==3.9.2
-umap-learn==0.5.9.post2
-inflect  
-
-matplotlib==3.10.7
+nose==1.3.7
+pip-chill==1.0.3
+plotly==6.3.1
+pytest==8.4.2
 seaborn==0.13.2
-
-tqdm==4.67.1
-session-info==1.0.1
-
-pyarrow==21.0.0
-pynndescent==0.5.13
-regex==2025.10.23
-requests==2.32.5
-PyYAML==6.0.3
+smart-open==7.4.1
+tomli==2.0.1
+torch==2.9.0
+transformers==4.57.1
+umap-learn==0.5.8
+scikit-learn==1.7.2
+session_info
+# aiohappyeyeballs==2.6.1 # Installed as dependency for aiohttp
+# aiosignal==1.4.0 # Installed as dependency for aiohttp
+# anyio==4.11.0 # Installed as dependency for httpx
+# asttokens==3.0.0 # Installed as dependency for stack-data
+# attrs==25.4.0 # Installed as dependency for aiohttp
+# autocommand==2.2.2 # Installed as dependency for jaraco.text
+# certifi==2025.10.5 # Installed as dependency for httpcore, httpx, requests
+# charset-normalizer==3.4.4 # Installed as dependency for requests
+# click==8.3.0 # Installed as dependency for nltk
+# comm==0.2.3 # Installed as dependency for ipykernel
+# contourpy==1.3.3 # Installed as dependency for matplotlib
+# cycler==0.12.1 # Installed as dependency for matplotlib
+# debugpy==1.8.17 # Installed as dependency for ipykernel
+# decorator==5.2.1 # Installed as dependency for ipython
+# dill==0.4.0 # Installed as dependency for datasets, multiprocess
+# executing==2.2.1 # Installed as dependency for stack-data
+# filelock==3.20.0 # Installed as dependency for datasets, huggingface-hub, torch, transformers
+# fonttools==4.60.1 # Installed as dependency for matplotlib
+# frozenlist==1.8.0 # Installed as dependency for aiohttp, aiosignal
+# fsspec==2025.9.0 # Installed as dependency for datasets, huggingface-hub, torch
+# greenlet==3.2.4 # Installed as dependency for sqlalchemy
+# h11==0.16.0 # Installed as dependency for httpcore
+# hf-xet==1.1.10 # Installed as dependency for huggingface-hub
+# httpcore==1.0.9 # Installed as dependency for httpx
+# httpx==0.28.1 # Installed as dependency for datasets
+# huggingface-hub==0.35.3 # Installed as dependency for datasets, tokenizers, transformers
+# idna==3.11 # Installed as dependency for anyio, httpx, requests, yarl
+# inflect==7.5.0 # Installed as dependency for jaraco.text
+# iniconfig==2.3.0 # Installed as dependency for pytest
+# ipython==9.6.0 # Installed as dependency for ipykernel
+# ipython-pygments-lexers==1.1.1 # Installed as dependency for ipython
+# jaraco.context==5.3.0 # Installed as dependency for jaraco.text
+# jaraco.functools==4.0.1 # Installed as dependency for jaraco.text
+# jaraco.text==3.12.1 # Installed as dependency for jaraco.collections
+# jedi==0.19.2 # Installed as dependency for ipython
+# jinja2==3.1.6 # Installed as dependency for torch
+# joblib==1.5.2 # Installed as dependency for hdbscan, nltk, pynndescent, scikit-learn
+# jupyter-client==8.6.3 # Installed as dependency for ipykernel
+# jupyter-core==5.9.1 # Installed as dependency for ipykernel, jupyter-client
+# kiwisolver==1.4.9 # Installed as dependency for matplotlib
+# llvmlite==0.45.1 # Installed as dependency for numba, pynndescent
+# mako==1.3.10 # Installed as dependency for alembic
+# markupsafe==3.0.3 # Installed as dependency for jinja2, mako
+# matplotlib==3.10.7 # Installed as dependency for seaborn
+# matplotlib-inline==0.1.7 # Installed as dependency for ipykernel, ipython
+# more-itertools==10.8.0 # Installed as dependency for inflect, jaraco.functools, jaraco.text
+# mpmath==1.3.0 # Installed as dependency for sympy
+# multidict==6.7.0 # Installed as dependency for aiohttp, yarl
+# multiprocess==0.70.16 # Installed as dependency for datasets
+# narwhals==2.9.0 # Installed as dependency for plotly
+# nest-asyncio==1.6.0 # Installed as dependency for ipykernel
+# networkx==3.5 # Installed as dependency for torch
+# numba==0.62.1 # Installed as dependency for pynndescent, umap-learn
+# numpy==2.3.4 # Installed as dependency for contourpy, datasets, hdbscan, matplotlib, numba, pandas, scikit-learn, scipy, seaborn, transformers, umap-learn
+# nvidia-cublas-cu12==12.8.4.1 # Installed as dependency for nvidia-cudnn-cu12, nvidia-cusolver-cu12, torch
+# nvidia-cuda-cupti-cu12==12.8.90 # Installed as dependency for torch
+# nvidia-cuda-nvrtc-cu12==12.8.93 # Installed as dependency for torch
+# nvidia-cuda-runtime-cu12==12.8.90 # Installed as dependency for torch
+# nvidia-cudnn-cu12==9.10.2.21 # Installed as dependency for torch
+# nvidia-cufft-cu12==11.3.3.83 # Installed as dependency for torch
+# nvidia-cufile-cu12==1.13.1.3 # Installed as dependency for torch
+# nvidia-curand-cu12==10.3.9.90 # Installed as dependency for torch
+# nvidia-cusolver-cu12==11.7.3.90 # Installed as dependency for torch
+# nvidia-cusparse-cu12==12.5.8.93 # Installed as dependency for nvidia-cusolver-cu12, torch
+# nvidia-cusparselt-cu12==0.7.1 # Installed as dependency for torch
+# nvidia-nccl-cu12==2.27.5 # Installed as dependency for torch
+# nvidia-nvjitlink-cu12==12.8.93 # Installed as dependency for nvidia-cufft-cu12, nvidia-cusolver-cu12, nvidia-cusparse-cu12, torch
+# nvidia-nvshmem-cu12==3.3.20 # Installed as dependency for torch
+# nvidia-nvtx-cu12==12.8.90 # Installed as dependency for torch
+# packaging==25.0 # Installed as dependency for datasets, huggingface-hub, ipykernel, matplotlib, plotly, pytest, transformers
+# pandas==2.3.3 # Installed as dependency for datasets, seaborn
+# parso==0.8.5 # Installed as dependency for jedi
+# pexpect==4.9.0 # Installed as dependency for ipython
+# pillow==12.0.0 # Installed as dependency for matplotlib
+# platformdirs==4.5.0 # Installed as dependency for jupyter-core
+# pluggy==1.6.0 # Installed as dependency for pytest
+# prompt-toolkit==3.0.52 # Installed as dependency for ipython
+# propcache==0.4.1 # Installed as dependency for aiohttp, yarl
+# psutil==7.1.1 # Installed as dependency for ipykernel
+# ptyprocess==0.7.0 # Installed as dependency for pexpect
+# pure-eval==0.2.3 # Installed as dependency for stack-data
+# pyarrow==21.0.0 # Installed as dependency for datasets
+# pygments==2.19.2 # Installed as dependency for ipython, ipython-pygments-lexers, pytest
+# pynndescent==0.5.13 # Installed as dependency for umap-learn
+# pyparsing==3.2.5 # Installed as dependency for matplotlib
+# python-dateutil==2.9.0.post0 # Installed as dependency for jupyter-client, matplotlib, pandas
+# pytz==2025.2 # Installed as dependency for pandas
+# pyyaml==6.0.3 # Installed as dependency for datasets, huggingface-hub, transformers
+# pyzmq==27.1.0 # Installed as dependency for ipykernel, jupyter-client
+# regex==2025.10.23 # Installed as dependency for nltk, transformers
+# requests==2.32.5 # Installed as dependency for datasets, huggingface-hub, transformers
+# safetensors==0.6.2 # Installed as dependency for transformers
+# scikit-learn==1.7.2 # Installed as dependency for hdbscan, pynndescent, umap-learn
+# scipy==1.16.2 # Installed as dependency for hdbscan, pynndescent, scikit-learn, umap-learn
+# six==1.17.0 # Installed as dependency for python-dateutil
+# sniffio==1.3.1 # Installed as dependency for anyio
+# sqlalchemy==2.0.44 # Installed as dependency for alembic
+# stack-data==0.6.3 # Installed as dependency for ipython
+# sympy==1.14.0 # Installed as dependency for torch
+# threadpoolctl==3.6.0 # Installed as dependency for scikit-learn
+# tokenizers==0.22.1 # Installed as dependency for transformers
+# tornado==6.5.2 # Installed as dependency for ipykernel, jupyter-client
+# tqdm==4.67.1 # Installed as dependency for datasets, huggingface-hub, nltk, transformers, umap-learn
+# traitlets==5.14.3 # Installed as dependency for ipykernel, ipython, jupyter-client, jupyter-core, matplotlib-inline
+# triton==3.5.0 # Installed as dependency for torch
+# typeguard==4.4.4 # Installed as dependency for inflect
+# typing-extensions==4.15.0 # Installed as dependency for aiosignal, alembic, anyio, huggingface-hub, sqlalchemy, torch, typeguard
+# tzdata==2025.2 # Installed as dependency for pandas
+# urllib3==2.5.0 # Installed as dependency for requests
+# wcwidth==0.2.14 # Installed as dependency for prompt-toolkit
+# wrapt==2.0.0 # Installed as dependency for smart-open
+# xxhash==3.6.0 # Installed as dependency for datasets
+# yarl==1.22.0 # Installed as dependency for aiohttp
+# zipp==3.19.2 # Installed as dependency for importlib-metadata
