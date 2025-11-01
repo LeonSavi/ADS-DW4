@@ -382,12 +382,13 @@ Our function preprocess_df, picks up the main cleaning steps in the following or
 5. We apply lemmatization.
 6. We remove stopwords
 
+Explaination:
 
-The number cleaning part was done because we believe that numbers in reviews can have different meanings, for example a rating (e.g. 7.5/10) is very different from a year (e.g. 80s) or from a generic number (e.g. 3 actors). Thus we wanted to keep this information while avoiding to have too many different numbers that would not add value to our models.
+- The number cleaning part was done because we believe that numbers in reviews can have different meanings, for example a rating (e.g. 7.5/10) is very different from a year (e.g. 80s) or from a generic number (e.g. 3 actors). Thus we wanted to keep this information while avoiding to have too many different numbers that would not add value to our models. Although, we mutually agreed that simply removing the numbers would have been much easier, we decided to follow this alternative path.
 
-We decided on removing some custom stopwords ourselves aswell. These are movie and film, this choice was made because we saw that they were influencing the results of our models intially, while they do not add any relevant information to the reviews. Since every review is about a movie/film, these words are not relevant for our classification task.
+- We decided on removing some custom stopwords ourselves aswell. These are movie and film, this choice was made because we saw that they were influencing the results of our models intially, while they do not add any relevant information to the reviews. Since every review is about a movie/film, these words are not relevant for our classification task.
 
-Another choice we made was to do the lemmatization before removing the stopwords, partly because some words mighr become stopwords only after lemmatization and partly because we wanted to keep the context of the words as much as possible before removing them, since lemmatization is context dependent. For instance, if lemmatizer identifies 'filming' as a noun, and appropriately leaves its '-ing' ending unaltered while further altering 'is' to its base form 'be'. In this way, the lemmatizer more appropriately conflates irregular verb forms.
+- Another choice we made was to do the lemmatization before removing the stopwords, partly because some words mighr become stopwords only after lemmatization and partly because we wanted to keep the context of the words as much as possible before removing them, since lemmatization is context dependent. For instance, if lemmatizer identifies 'filming' as a noun, and appropriately leaves its '-ing' ending unaltered while further altering 'is' to its base form 'be'. In this way, the lemmatizer more appropriately conflates irregular verb forms.
 
 
 # Text Representation
