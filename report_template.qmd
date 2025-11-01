@@ -385,10 +385,9 @@ Our function preprocess_df, picks up the main cleaning steps in the following or
 
 The number cleaning part was done because we believe that numbers in reviews can have different meanings, for example a rating (e.g. 7.5/10) is very different from a year (e.g. 80s) or from a generic number (e.g. 3 actors). Thus we wanted to keep this information while avoiding to have too many different numbers that would not add value to our models.
 
-
 We decided on removing some custom stopwords ourselves aswell. These are movie and film, this choice was made because we saw that they were influencing the results of our models intially, while they do not add any relevant information to the reviews. Since every review is about a movie/film, these words are not relevant for our classification task.
 
-Another choice we made was to do the lemmatization before removing the stopwords, partly because some words mighr become stopwords only after lemmatization and partly because we wanted to keep the context of the words as much as possible before removing them, since lemmatization is context dependent.
+Another choice we made was to do the lemmatization before removing the stopwords, partly because some words mighr become stopwords only after lemmatization and partly because we wanted to keep the context of the words as much as possible before removing them, since lemmatization is context dependent. For instance, if lemmatizer identifies 'filming' as a noun, and appropriately leaves its '-ing' ending unaltered while further altering 'is' to its base form 'be'. In this way, the lemmatizer more appropriately conflates irregular verb forms.
 
 
 # Text Representation
@@ -1193,7 +1192,7 @@ Our reading material we used for this assignment:
 - NMF: https://medium.com/codex/what-is-non-negative-matrix-factorization-nmf-32663fb4d65
 - TF-IDF: https://www.geeksforgeeks.org/machine-learning/understanding-tf-idf-term-frequency-inverse-document-frequency/
 - SVD vs PCA: https://www.youtube.com/watch?v=AA9yjhj0cnE&t=116
-- SVD vs PCA2: https://www.youtube.com/watch?v=5HNr_j6LmPc
+- SVD vs PCA 2: https://www.youtube.com/watch?v=5HNr_j6LmPc
 - Why LDA should not use IDFDF inputs: https://stackoverflow.com/a/44789327/6470915
 - LDA w/ TFIDF: https://medium.com/analytics-vidhya/topic-modelling-using-word-embeddings-and-latent-dirichlet-allocation-3494778307bc
 - TruncatedSVD: https://www.youtube.com/watch?v=gVLIk43B5_U
@@ -1202,3 +1201,4 @@ Our reading material we used for this assignment:
 - V-Measure: https://www.geeksforgeeks.org/machine-learning/ml-v-measure-for-evaluating-clustering-performance/
 - Other Scores: https://medium.com/@Sunil_Kumawat/performance-metrics-for-clustering-9badee0b7db8
 - Cosine: https://www.geeksforgeeks.org/dbms/cosine-similarity/
+- Lemmas: https://www.ibm.com/think/topics/stemming-lemmatization
