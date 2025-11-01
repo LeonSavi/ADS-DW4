@@ -273,7 +273,6 @@ def preprocess_df(df:pd.DataFrame
     # 4 remove stopwords 
     df['lemmas'] = df['lemmas_pre_stop'].apply(lambda x: _remove_stopwords(x,lst_output= True))
 
-
     return df    
 ```
     
@@ -588,7 +587,7 @@ Goal: Partition documents into k clusters based on similarity in vector space
 
 ### How it works:
 
-Each document is represented as a high-dimensional TF-IDF vector (term frequency–inverse document frequency), which captures how important each word is to that document relative to the corpus. K-Means starts by selecting k random “centroids” (one per cluster).
+Each document is represented as a high-dimensional TF-IDF vector, which captures how important each word is to that document relative to the corpus. K-Means starts by selecting k random “centroids” (one per cluster).
 
 Then it iteratively:
 
@@ -703,6 +702,10 @@ Training is usually done by minimizing reconstruction error via iterative update
 
 - Produces “soft” associations but not probabilistic ones.
 - Can get stuck in local minima (hence long iteration limits help).
+
+## Detour: Cosine Similarity
+Cosine similarity is widely used in text analytics to measure the similarity between two non-zero vectors, by computing the cosine of the angle between them. This measure focusses on their shared terms rather than their size. This method is suitable for high-dimensional and sparse vectors like TF-IDF. Cosine similarity allows for comparisons independent of document size or word count. For this reason in our models we used this measure rather than others, such the Euclidean distance.
+
 
 ```{python}
 def Clusters_Indicators(df:pd.DataFrame,
@@ -930,7 +933,7 @@ def plot_ic(comparison: pd.DataFrame) -> None:
     ax.set_xlabel("N of Clusters (k)", fontsize=10)
     ax.set_ylabel("Score", fontsize=10)
 
-    # plt.tight_layout()
+    plt.tight_layout()
     plt.savefig('charts/GMM_IC.png')
     plt.show()
 
@@ -946,21 +949,14 @@ def plot_top_terms(df: pd.DataFrame,
                    ) -> None:
     """
     Plot top-n terms per topic for LDA and NMF.
-    Layout:
-      - k <= 5  -> 1 x k
-      - 6..10   -> 2 x 5
-      - >10     -> ceil(k/5) x 5  (general case)
-    Minimalist, high data-to-ink ratio.
     """
 
     sns.set_style("whitegrid")
     sns.set_context("notebook")
 
-    # Prepare corpus once
     in_text = df['lemmas'].apply(lambda x: " ".join(x) if isinstance(x, list) else x)
     in_text = in_text[in_text.str.strip().astype(bool)]
 
-    # Fit vectorisers once
     tfidf_vec = TfidfVectorizer(
         max_features=max_features, stop_words='english', min_df=min_df, max_df=max_df
     ).fit(in_text)
@@ -1042,7 +1038,6 @@ def plot_sentiment_cluster_panel(ml_dct: dict,
     n_rows = len(models)
     n_cols = len(k_values)
 
-    # Figure size scales with grid
     fig_w = max(8, figsize_per_cell[0] * n_cols)
     fig_h = max(5, figsize_per_cell[1] * n_rows)
     fig, axes = plt.subplots(n_rows, n_cols, figsize=(fig_w, fig_h), squeeze=False)
@@ -1080,7 +1075,6 @@ def plot_sentiment_cluster_panel(ml_dct: dict,
             ax.set_xlabel("Cluster" if r == n_rows - 1 else "", fontsize=9)
             ax.set_ylabel("Sentiment" if c == 0 else "", fontsize=9)
 
-            # Clean spines
             for sp in ["top","right","left","bottom"]:
                 ax.spines[sp].set_visible(False)
 
@@ -1123,21 +1117,24 @@ Below are the metrics we decided to use along with a short explanantion on all o
 - Metrics: Silhouette, Davies–Bouldin (DBI), Calinski–Harabasz (CHI), ARI, NMI, V-measure, FMI; plus AIC/BIC for GMM.
 
 - Description:
-    - Silhouette: Measures cohesion and separation between clusters. Values range from –1 to 1; higher scores indicate well-separated, dense clusters.
+    - Silhouette: it measures how similar an object is to its own cluster compared to other clusters. It ranges from -1 to 1, where a higher score indicates better-defined clusters.
 
-    - Davies–Bouldin Index (DBI): Ratio of within- to between-cluster distances. Lower values indicate better defined, more distinct clusters.
+    - Davies–Bouldin Index (DBI): it evaluates the average similarity ratio of each cluster with its most similar cluster. A lower DBI indicates better clustering.
 
     - Calinski–Harabasz Index (CHI): Variance ratio of between- to within-cluster dispersion. Higher scores mean greater separation and compactness.
 
-    - Adjusted Rand Index (ARI): Compares predicted clusters with true labels, correcting for chance. Higher = better agreement.
+    - Adjusted Rand Index (ARI): it measures the similarity between the true cluster assignments and the clustering algorithm’s assignments. It adjusts for chance grouping, making it more robust.
 
-    - Normalised Mutual Information (NMI): Measures shared information between predicted and true labels; ranges 0–1, higher = stronger match.
+    - Normalised Mutual Information (NMI): it measures the amount of shared information between the predicted clusters and the true clusters. It ranges from 0 to 1, where higher values indicate better clustering.
 
-    - V-measure: Harmonic mean of homogeneity and completeness; higher values indicate balanced and consistent clustering.
+    - V-measure: The V-measure is an external clustering evaluation metric that balances homogeneity and completeness using their harmonic mean.
+        - Homogeneity: each cluster contains only members of a single class.
+        - Completeness: ll members of a class are assigned to the same cluster.
+        It ranges from 0 to 1, with 1 indicating perfectly homogeneous and complete clustering.
 
-    - Fowlkes–Mallows Index (FMI): Geometric mean of precision and recall between cluster and label pairs; higher values denote greater similarity.
+    - Fowlkes–Mallows Index (FMI): it is an external evaluation method that is used to determine the similarity between two clusterings or confusion matrices. Through geometric mean of precision and recall between cluster and label pairs; an higher FMI value indicates a greater similarity.
 
-    - Akaike (AIC) & Bayesian (BIC) Information Criteria: Penalised likelihood scores used only for GMM to compare model fit versus complexity; lower = more parsimonious, better-fitting model.
+    - Akaike (AIC) & Bayesian (BIC) Information Criteria: both rewards models that fit the data well while penalizing unnecessary complexity. however, BIC is stricter for the complexity, especially for large datasets. These scores can be computetd only on GMM as it uses EM algo.
 
 
 How to interpret: 
@@ -1149,7 +1146,7 @@ Along with these measure we also have some other charts to get a better view of 
 
 ### cluster_charts
 ```{python}
-cluster_charts(ml_dct=dct_models,models=test_models,umap_metric ='manhattan')
+cluster_charts(ml_dct=dct_models,models=test_models,umap_metric ='cosine')
 ```
 
 Above is the chart which shows the clustering at k2, k5 and k10. This is shown for all our four models. While it may be hard to interpret, intuitively we see that the two models on the left seem to seperate the clusters better. The other two models, GMM and VKM look way more chaotic, the different clusters are all overlapping. Along with the visual overview there is also a score for ARI and NMI which can be interpreted as higher equals better. Lower scores on these measures can mean that the model is bad or that the k is unsuitable. We believe poor performance across the 3 shown k's are a pretty good indication of general performance. 
@@ -1159,11 +1156,7 @@ Above is the chart which shows the clustering at k2, k5 and k10. This is shown f
 plot_ic(comparisons)
 ```
 
-- Metrics: AIC and BIC across k (GMM only).
-
-- Why important: Penalised likelihood for principled model selection.
-
-- How to interpret: Choose k at the minimum of BIC (usually stricter); if AIC and BIC disagree, BIC is typically preferred.
+AIC and BIC decrease as the GMM model fit improves, but penalize complexity differently. As K increases, both metrics drop initially for better fit, then rise during overfitting. The optimal K is the point where AIC/BIC reach their minimum, and BIC often selects a smaller number of clusters due to its stronger complexity penalty. Both scores remains largely negative.
 
 ```{python}
 plot_top_terms(cleaned,dct_models)
@@ -1186,3 +1179,26 @@ Write down what each team member contributed to the project.
 - Leonardo Savianne: Data preparation, made the code for the models and the graphs in the results.
 - Thomas Rietman: Wrote the story, explained the models interpreted the results, cleanup and putting it all together.
 - Angelos Papoutsis: Review
+
+# GitHub Repo
+
+In our [Github repo](https://github.com/LeonSavi/ADS-DW4) you can find more materials, such as: charts, csv with data, R codes, codes contribution.
+
+# References
+
+Our reading material we used for this assignment:
+- Text Cleaning in Python: https://www.geeksforgeeks.org/machine-learning/text-preprocessing-in-python-set-1/
+- Wordnet fix:  https://stackoverflow.com/questions/15586721/wordnet-lemmatization-and-pos-tagging-in-python
+- Count Vectorizer and TFIDF: https://medium.com/@ashwinkumar577/countvectorizer-and-tfidfvectorizer-for-beginner-ac81afef30aa
+- NMF: https://medium.com/codex/what-is-non-negative-matrix-factorization-nmf-32663fb4d65
+- TF-IDF: https://www.geeksforgeeks.org/machine-learning/understanding-tf-idf-term-frequency-inverse-document-frequency/
+- SVD vs PCA: https://www.youtube.com/watch?v=AA9yjhj0cnE&t=116
+- SVD vs PCA2: https://www.youtube.com/watch?v=5HNr_j6LmPc
+- Why LDA should not use IDFDF inputs: https://stackoverflow.com/a/44789327/6470915
+- LDA w/ TFIDF: https://medium.com/analytics-vidhya/topic-modelling-using-word-embeddings-and-latent-dirichlet-allocation-3494778307bc
+- TruncatedSVD: https://www.youtube.com/watch?v=gVLIk43B5_U
+- UMAP: https://pair-code.github.io/understanding-umap/
+- BIC & AIC: https://medium.com/@jshaik2452/choosing-the-best-model-a-friendly-guide-to-aic-and-bic-af220b33255f
+- V-Measure: https://www.geeksforgeeks.org/machine-learning/ml-v-measure-for-evaluating-clustering-performance/
+- Other Scores: https://medium.com/@Sunil_Kumawat/performance-metrics-for-clustering-9badee0b7db8
+- Cosine: https://www.geeksforgeeks.org/dbms/cosine-similarity/
